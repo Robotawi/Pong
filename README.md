@@ -22,7 +22,7 @@ This is a Bong game built as the Capstone project for the [Udacity C++ Nanodegre
 1. Clone this repo.
 2. Make a build directory in the top level directory: `mkdir build && cd build`
 3. Compile: `cmake .. && make`
-4. Run it: `./BongGame`.
+4. Run it: `./PongGame`.
 
 ## Game instructions
 This is a two player Pong game. The player on the right side move up and down through the "up" and "down" buttons, and the player on the left moves up and down using "w" and "s" respectively. The winner is the one who scores more.
