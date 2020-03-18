@@ -1,16 +1,28 @@
 #include "game.h"
 #include <iostream>
+#include <thread>
 #include "SDL.h"
 
-Game::Game(std::size_t grid_width, std::size_t grid_height)
-    : snake(grid_width, grid_height),
-      engine(dev()),
-      random_w(0, static_cast<int>(grid_width)),
-      random_h(0, static_cast<int>(grid_height)) {
-  PlaceFood();
-}
+Game::Game(std::size_t screen_width, std::size_t screen_height, std::size_t grid_width, std::size_t grid_height){
+    newturn = true;
 
-void Game::Run(Controller const &controller, Renderer &renderer,
+    scrnwidth = static_cast<int>(screen_width);
+    scrnheight = static_cast<int>(screen_height);
+    grdwidth = static_cast<int>(grid_width);
+    grdnheight = static_cast<int>(grid_height);
+
+    ball = new Ball(scrnwidth, scrnheight, grdwidth, grdnheight);
+    ball->reset();
+
+    rplayer = new Player(scrnwidth, scrnheight, grdwidth, grdnheight, std::move("right"));
+    lplayer = new Player(scrnwidth, scrnheight, grdwidth, grdnheight, std::move("left"));
+}
+Game::~Game() {
+    delete(ball);
+    delete(rplayer);
+    delete(lplayer);
+}
+void Game::run(Controller const &controller, Renderer &renderer,
                std::size_t target_frame_duration) {
   Uint32 title_timestamp = SDL_GetTicks();
   Uint32 frame_start;
@@ -19,14 +31,18 @@ void Game::Run(Controller const &controller, Renderer &renderer,
   int frame_count = 0;
   bool running = true;
 
+
   while (running) {
     frame_start = SDL_GetTicks();
 
     // Input, Update, Render - the main game loop.
-    controller.HandleInput(running, snake);
-    Update();
-    renderer.Render(snake, food);
-
+    controller.HandleInput(running, rplayer, lplayer);
+    update(); // next step
+    renderer.Render(rplayer, lplayer, ball);
+    if (newturn){
+        std::this_thread::sleep_for(std::chrono::seconds(2));
+        newturn = false;
+    }
     frame_end = SDL_GetTicks();
 
     // Keep track of how long each loop through the input/update/render cycle
@@ -36,7 +52,7 @@ void Game::Run(Controller const &controller, Renderer &renderer,
 
     // After every second, update the window title.
     if (frame_end - title_timestamp >= 1000) {
-      renderer.UpdateWindowTitle(score, frame_count);
+      renderer.UpdateWindowTitle(lscore, rscore, frame_count);
       frame_count = 0;
       title_timestamp = frame_end;
     }
@@ -50,38 +66,80 @@ void Game::Run(Controller const &controller, Renderer &renderer,
   }
 }
 
-void Game::PlaceFood() {
-  int x, y;
-  while (true) {
-    x = random_w(engine);
-    y = random_h(engine);
-    // Check that the location is not occupied by a snake item before placing
-    // food.
-    if (!snake.SnakeCell(x, y)) {
-      food.x = x;
-      food.y = y;
-      return;
+void Game::update() {
+  ball->move();
+  chkWallCollision();
+  chkBallPlayerCollision();
+}
+
+void Game::chkWallCollision() {
+//    std::cout << ball->getDirection() << std::endl;
+    if (ball->getY() == 0){
+        switch(ball->getDirection()){
+            case 1:
+                ball->redirect(2);
+                break;
+            case 3:
+                ball->redirect(4);
+                break;
+        }
     }
-  }
+    else if (ball->getY() == scrnheight - ball->getRadius()){
+        switch(ball->getDirection()){
+            case 2:
+                ball->redirect(1);
+                break;
+            case 4:
+                ball->redirect(3);
+                break;
+        }
+    }
 }
 
-void Game::Update() {
-  if (!snake.alive) return;
+void Game::chkBallPlayerCollision()  {
+    //if the ball on the left
+    if (ball->getX() == ball->getRadius()){ // check if ball y is within the player y, if in, collision. if not, score and reset
+//        std::cout << " Ball at the left edge, ball x is " << ball->getX() << ". Ball y is "<< ball->getY() << std::endl;
+//        std::cout << " Player y is" << ->getX() << ". Ball y is "<< ball->getY() << std::endl;
+        if (ball->getY() >= lplayer->getY() && ball->getY() <= lplayer->getY() + lplayer->getHeight()){
+            //bounce
+            switch(ball->getDirection()){
+                case 1:
+                    ball->redirect(3);
+                    break;
+                case 2:
+                    ball->redirect(4);
+                    break;
+            }
+        }
+        else{
+            rscore ++;
+            ball->reset();
+            rplayer->reset();
+            lplayer->reset();
 
-  snake.Update();
+        }
+    }
+    //if the ball on the right
+    else if (ball->getX() == scrnwidth - 2 * ball->getRadius()){
+        if (ball->getY() >= rplayer->getY() && ball->getY() <= rplayer->getY() + lplayer->getHeight()){
+            switch(ball->getDirection()){
+                case 3:
+                    ball->redirect(1);
+                    break;
+                case 4:
+                    ball->redirect(2);
+                    break;
+            }
+        }
+        else{
+            lscore ++;
+            ball->reset();
+            rplayer->reset();
+            lplayer->reset();
 
-  int new_x = static_cast<int>(snake.head_x);
-  int new_y = static_cast<int>(snake.head_y);
-
-  // Check if there's food over here
-  if (food.x == new_x && food.y == new_y) {
-    score++;
-    PlaceFood();
-    // Grow snake and increase speed.
-    snake.GrowBody();
-    snake.speed += 0.02;
-  }
+        }
+    }
 }
 
-int Game::GetScore() const { return score; }
-int Game::GetSize() const { return snake.size; }
+std::string Game::getScore() { return "Left player ("+std::to_string(lscore)+") - Right player ("+std::to_string(rscore)+")"; }
